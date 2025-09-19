@@ -1,0 +1,9 @@
+psycopg2
+pandas
+plotly.express
+scikit-learn
+streamlit
+folium
+streamlit-folium
+numpy
+matplotlib
