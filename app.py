@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn import tree
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
 import psycopg2 as pg
 from warnings import filterwarnings
 import folium
@@ -455,6 +455,7 @@ elif pagina_selecionada == "3. Análise Preditiva e Relatório":
         )
 
         st.plotly_chart(fig_scatter, use_container_width=True)
+        
 
     with tab2_p3:
         st.header("Treinamento do Modelo Random Forest")
@@ -474,17 +475,42 @@ elif pagina_selecionada == "3. Análise Preditiva e Relatório":
         st.bar_chart(feature_importances.sort_values(by='importance', ascending=False))
 
     with tab3_p3:
-        st.header("Visualizando uma Árvore de Decisão")
+        st.header("Análise do Modelo de Árvore de Decisão")
         st.write("""
-            Enquanto o Random Forest usa centenas de árvores, visualizar uma única árvore
+            Enquanto o Random Forest usa centenas de árvores, analisar uma única árvore
             nos ajuda a entender como o modelo toma decisões. 
-            Abaixo, uma árvore simples (limitada a 3 níveis de profundidade) para ilustrar o processo.
+            Abaixo, avaliamos e visualizamos uma árvore simples (limitada a 3 níveis de profundidade) para ilustrar o processo.
         """)
         
+        # Treinamos o modelo de árvore
         tree_model = tree.DecisionTreeRegressor(max_depth=3, random_state=42)
         tree_model.fit(X_train, y_train)
 
+        # PASSO 1: Fazer previsões no conjunto de teste
+        y_pred_tree = tree_model.predict(X_test)
+
+        # PASSO 2: Calcular as métricas de regressão
+        r2_tree = r2_score(y_test, y_pred_tree)
+        rmse_tree = np.sqrt(mean_squared_error(y_test, y_pred_tree))
+
+        st.subheader("Métricas de Desempenho")
         
+        # PASSO 3: Exibir as métricas
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric(label="R² (Árvore de Decisão)", value=f"{r2_tree:.3f}")
+        with col2:
+            st.metric(label="RMSE (Árvore de Decisão)", value=f"{rmse_tree:.3f}")
+        
+        st.info("""
+            **Observação:** É esperado que o R² de uma única árvore seja **menor** que o do Random Forest.
+            O Random Forest combina a "sabedoria" de muitas árvores para criar uma previsão mais robusta e precisa.
+        """)
+        
+        st.markdown("---")
+
+        st.subheader("Visualização da Árvore")
+        # O código para plotar a árvore continua o mesmo
         fig, ax = plt.subplots(figsize=(20, 10))
         tree.plot_tree(
             tree_model,
@@ -529,23 +555,17 @@ elif pagina_selecionada == "4. Conclusão":
     X_full = df_modelo[features]
     y_full_log = np.log1p(df_modelo['vl_pib_per_capta'])
 
-    # Treinamos o modelo Random Forest com TODOS os dados para ter as melhores previsões
     rf_final_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
     rf_final_model.fit(X_full, y_full_log)
 
-    # Passo 2: Fazer previsões para todos os municípios e adicionar ao DataFrame
     predicoes_log = rf_final_model.predict(X_full)
     
-    # Passo 3: Converter previsões de log para a escala original (R$)
-    # np.expm1 é a função inversa de np.log1p
     df_modelo['pib_predito'] = np.expm1(predicoes_log)
     df_modelo['diferenca_predicao'] = df_modelo['pib_predito'] - df_modelo['vl_pib_per_capta']
 
-    # --- Interface Interativa ---
     st.header('Análise Interativa por Município')
     st.write('Selecione um município para ver seus dados e a predição do modelo de Random Forest.')
 
-    # Criamos uma coluna 'display' para facilitar a busca no selectbox
     df_modelo['display_name'] = df_modelo['nome_municipio'] + ' - ' + df_modelo['uf']
     
     municipio_selecionado = st.selectbox(
@@ -554,7 +574,6 @@ elif pagina_selecionada == "4. Conclusão":
     )
 
     if municipio_selecionado:
-        # Filtra o dataframe para o município escolhido
         dados_municipio = df_modelo[df_modelo['display_name'] == municipio_selecionado].iloc[0]
 
         st.subheader(f"Resultados para {municipio_selecionado}")
@@ -580,5 +599,4 @@ elif pagina_selecionada == "4. Conclusão":
         st.markdown("---")
         st.subheader("Dados do Município Utilizados no Modelo")
         
-        # Mostra os dados que o modelo usou para fazer a previsão
         st.table(dados_municipio[features].rename("Valor").to_frame())
