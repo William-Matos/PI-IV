@@ -7,3 +7,4 @@ folium
 streamlit-folium
 numpy
 matplotlib
+seaborn

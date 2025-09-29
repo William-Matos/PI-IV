@@ -8,12 +8,13 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn import tree
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score, confusion_matrix
 import psycopg2 as pg
 from warnings import filterwarnings
 import folium
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from streamlit_folium import folium_static
 import json
 
@@ -383,29 +384,52 @@ elif pagina_selecionada == "3. Análise Preditiva e Relatório":
 
     # --- Treinamento dos modelos ---
     with st.spinner('Treinando modelos... Por favor, aguarde.'):
-        # Modelo de Regressão Linear (com dados escalonados)
         lr_model = LinearRegression()
         lr_model.fit(X_train_scaled, y_train)
         y_pred_lr = lr_model.predict(X_test_scaled)
-        r2_lr = r2_score(y_test, y_pred_lr)
-        rmse_lr = np.sqrt(mean_squared_error(y_test, y_pred_lr))
+        r2_lr, rmse_lr = r2_score(y_test, y_pred_lr), np.sqrt(mean_squared_error(y_test, y_pred_lr))
 
-        # Modelo Random Forest (pode usar dados escalonados ou não, usamos por consistência)
         rf_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
         rf_model.fit(X_train_scaled, y_train)
         y_pred_rf = rf_model.predict(X_test_scaled)
-        r2_rf = r2_score(y_test, y_pred_rf)
-        rmse_rf = np.sqrt(mean_squared_error(y_test, y_pred_rf))
+        r2_rf, rmse_rf = r2_score(y_test, y_pred_rf), np.sqrt(mean_squared_error(y_test, y_pred_rf))
         
-        # Modelo Árvore de Decisão
         tree_model = DecisionTreeRegressor(max_depth=5, random_state=42)
         tree_model.fit(X_train_scaled, y_train)
         y_pred_tree = tree_model.predict(X_test_scaled)
-        r2_tree = r2_score(y_test, y_pred_tree)
-        rmse_tree = np.sqrt(mean_squared_error(y_test, y_pred_tree))
+        r2_tree, rmse_tree = r2_score(y_test, y_pred_tree), np.sqrt(mean_squared_error(y_test, y_pred_tree))
+
+    # =================================================
+    # Funções de Plotagem Reutilizáveis
+    # =================================================
+    def plotar_matriz_confusao_adaptada(y_test, y_pred, ax, title):
+        y_test_real = np.expm1(y_test)
+        y_pred_real = np.expm1(y_pred)
+        try:
+            labels = ['Baixo', 'Médio', 'Alto']
+            y_test_cat, bins = pd.qcut(y_test_real, q=3, labels=labels, retbins=True, duplicates='drop')
+            y_pred_cat = pd.cut(y_pred_real, bins=bins, labels=labels, include_lowest=True).fillna(labels[0])
+            
+            cm = confusion_matrix(y_test_cat, y_pred_cat, labels=labels)
+            
+            sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax, cbar=False,
+                        xticklabels=labels, yticklabels=labels)
+            ax.set_title(title)
+            ax.set_xlabel('PIB Previsto (Faixa)')
+            ax.set_ylabel('PIB Real (Faixa)')
+        except ValueError:
+            ax.text(0.5, 0.5, 'Não foi possível\ngerar a matriz', ha='center', va='center')
+            ax.set_title(title)
+
+    def plotar_real_vs_predito(y_test, y_pred, title):
+        df_preds = pd.DataFrame({'PIB Real (log)': y_test, 'PIB Previsto (log)': y_pred})
+        fig = px.scatter(df_preds, x='PIB Previsto (log)', y='PIB Real (log)', title=title, opacity=0.5)
+        fig.add_shape(type='line', x0=y.min(), y0=y.min(), x1=y.max(), y1=y.max(), line=dict(color='Red', dash='dash'))
+        st.plotly_chart(fig, use_container_width=True)
+        st.write("Quanto mais os pontos se alinharem à linha vermelha, melhor o modelo.")
 
     # --- Abas para visualização ---
-    tab_comp, tab_lr, tab_rf, tab_tree = st.tabs(['🏆 Comparação', 'Regressão Linear', 'Random Forest', 'Árvore de Decisão'])
+    tab_comp, tab_lr, tab_rf, tab_tree = st.tabs(['🏆 Comparação Geral', 'Regressão Linear', 'Random Forest', 'Árvore de Decisão'])
 
     with tab_comp:
         st.subheader("Comparação de Desempenho dos Modelos")
@@ -417,42 +441,42 @@ elif pagina_selecionada == "3. Análise Preditiva e Relatório":
         }).sort_values(by='R² (R-quadrado)', ascending=False)
         st.dataframe(df_results.set_index('Modelo').style.format('{:.3f}'))
         
-        st.markdown("""
-        **Interpretação:**
-        - **R²:** Indica a porcentagem da variação no PIB per capita que o modelo consegue explicar. Mais perto de 1.0 é melhor.
-        - **RMSE:** Mostra o erro médio das previsões na escala do log(PIB). Menor é melhor.
-        
-        O **Random Forest** apresentou o melhor desempenho preditivo (maior R² e menor RMSE), pois é capaz de capturar relações não-lineares complexas que a Regressão Linear não consegue.
-        
-        **Trade-off:** A **Regressão Linear** oferece maior interpretabilidade (seus coeficientes nos dizem o peso de cada variável), enquanto a **Árvore de Decisão** mostra regras de negócio claras, apesar de serem modelos geralmente menos precisos que o Random Forest.
-        """)
+        st.markdown("---")
+        st.subheader("Comparação Visual dos Erros (Matriz de Confusão Adaptada)")
+        st.write("As matrizes abaixo mostram os acertos e erros de cada modelo ao tentar classificar os municípios em faixas de PIB (Baixo, Médio, Alto). A diagonal principal representa os acertos.")
+
+        fig, axes = plt.subplots(1, 3, figsize=(20, 5))
+        plotar_matriz_confusao_adaptada(y_test, y_pred_rf, axes[0], 'Random Forest')
+        plotar_matriz_confusao_adaptada(y_test, y_pred_lr, axes[1], 'Regressão Linear')
+        plotar_matriz_confusao_adaptada(y_test, y_pred_tree, axes[2], 'Árvore de Decisão')
+        plt.tight_layout()
+        st.pyplot(fig)
+        st.info("Visualmente, podemos ver que o **Random Forest** tende a ter mais acertos na diagonal e erros mais 'próximos' (ex: errar 'Médio' para 'Alto'), confirmando sua superioridade.")
+
 
     with tab_lr:
         st.header('Análise do Modelo de Regressão Linear')
         st.metric(label="R²", value=f"{r2_lr:.3f}")
+        st.metric(label="RMSE", value=f"{rmse_lr:.3f}")
         
         st.subheader("Interpretando os Coeficientes")
-        st.info("Os coeficientes mostram o impacto de cada variável no log(PIB). Como as variáveis foram escalonadas, os coeficientes podem ser comparados entre si para ver qual tem mais 'peso' no modelo.")
         coefs = pd.DataFrame(lr_model.coef_, index=X.columns, columns=['Coeficiente'])
         st.dataframe(coefs.sort_values(by='Coeficiente', ascending=False).style.format('{:.4f}'))
         
-        st.subheader('Análise de Resíduos')
-        residuos = y_test - y_pred_lr
-        df_residuos = pd.DataFrame({'Previsto': y_pred_lr, 'Resíduo': residuos})
-        
-        fig_res = px.scatter(df_residuos, x='Previsto', y='Resíduo', title='Resíduos vs. Valores Previstos')
-        fig_res.add_hline(y=0, line_dash="dash", line_color="red")
-        st.plotly_chart(fig_res, use_container_width=True)
-        st.info("Idealmente, os pontos deveriam se distribuir aleatoriamente em torno da linha vermelha, sem formar padrões.")
+        st.subheader('Análise Gráfica dos Erros')
+        plotar_real_vs_predito(y_test, y_pred_lr, "Regressão Linear: Valores Reais vs. Previstos")
 
     with tab_rf:
         st.header("Análise do Modelo Random Forest")
         st.metric(label="R²", value=f"{r2_rf:.3f}")
+        st.metric(label="RMSE", value=f"{rmse_rf:.3f}")
         
         st.subheader("Importância das Variáveis (Feature Importance)")
-        st.write("Quais variáveis o modelo considerou mais importantes para fazer suas previsões? (Mostrando as 20 principais)")
         feature_importances = pd.DataFrame(rf_model.feature_importances_, index=X.columns, columns=['importance'])
         st.bar_chart(feature_importances.sort_values(by='importance', ascending=False).head(20))
+
+        st.subheader('Análise Gráfica dos Erros')
+        plotar_real_vs_predito(y_test, y_pred_rf, "Random Forest: Valores Reais vs. Previstos")
 
     with tab_tree:
         st.header("Análise do Modelo de Árvore de Decisão")
@@ -460,10 +484,12 @@ elif pagina_selecionada == "3. Análise Preditiva e Relatório":
         st.metric(label='RMSE', value=f"{rmse_tree:.3f}")
         
         st.subheader("Visualização da Árvore")
-        st.write("Uma única árvore nos ajuda a entender as regras de decisão. (Limitada a 3 níveis para visualização)")
-        fig, ax = plt.subplots(figsize=(25, 12))
-        tree.plot_tree(tree_model, feature_names=X.columns, filled=True, rounded=True, fontsize=10, max_depth=3)
-        st.pyplot(fig)
+        fig_tree, ax = plt.subplots(figsize=(25, 12))
+        tree.plot_tree(tree_model, feature_names=X.columns, filled=True, rounded=True, fontsize=10, max_depth=3, ax=ax)
+        st.pyplot(fig_tree)
+
+        st.subheader('Análise Gráfica dos Erros')
+        plotar_real_vs_predito(y_test, y_pred_tree, "Árvore de Decisão: Valores Reais vs. Previstos")
         
 # =================================
 # PÁGINA 4: CONCLUSÃO
