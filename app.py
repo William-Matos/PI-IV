@@ -178,9 +178,6 @@ pagina_selecionada = st.sidebar.radio(
 # =================================
 # PÁGINA 1: APRESENTAÇÃO DO PROJETO
 # =================================
-# =================================
-# PÁGINA 1: APRESENTAÇÃO DO PROJETO
-# =================================
 if pagina_selecionada == '1. Apresentação do Projeto':
     st.title("Análise da Relação entre Desempenho no ENEM e Desenvolvimento Econômico Municipal")
     st.markdown("---")
@@ -212,7 +209,7 @@ if pagina_selecionada == '1. Apresentação do Projeto':
         """)
     
     st.markdown("---")
-    st.header("2. Objetivo e Hipóteses")
+    st.header("2. Objetivo, Hipóteses e Variáveis do Modelo")
     st.markdown("**Objetivo:** Identificar e explorar as relações existentes entre o desempenho dos estudantes do ensino médio e o crescimento econômico nos municípios brasileiros.")
     
     st.markdown("""
@@ -221,12 +218,46 @@ if pagina_selecionada == '1. Apresentação do Projeto':
     - **Hipótese 2:** Um aumento na qualidade da educação está positivamente correlacionado com o crescimento do PIB per capita municipal.
     """)
 
+    st.subheader("Variáveis Utilizadas na Modelagem")
+    st.markdown("""
+    Para construir os modelos preditivos, utilizamos um conjunto específico de variáveis, divididas em **alvo** (o que queremos prever) e **preditoras** (as informações que usamos para a previsão).
+    """)
+
+    # Detalhando a variável Alvo (Y)
+    st.markdown("🎯 **Variável Alvo (Y):**")
+    st.markdown("- **PIB per capita (log transformado):** O `vl_pib_per_capta` do município. Aplicamos uma transformação logarítmica (`log(1+x)`) para normalizar sua distribuição, o que melhora o desempenho dos modelos.")
+    
+    # Detalhando as variáveis Preditoras (X) com um expander
+    st.markdown(" predictor **Variáveis Preditoras (X):**")
+    with st.expander("Clique para ver a lista completa de variáveis usadas para prever o PIB"):
+        st.markdown("""
+        As informações usadas para treinar o modelo incluem um misto de dados brutos e características criadas através de engenharia de features para capturar relações mais complexas.
+
+        **Notas Médias do ENEM:**
+        - `media_cn`: Média em Ciências da Natureza
+        - `media_ch`: Média em Ciências Humanas
+        - `media_lc`: Média em Linguagens e Códigos
+        - `media_mt`: Média em Matemática
+        - `media_redacao`: Média na Redação
+
+        **Características das Escolas (% de alunos por município):**
+        - `perc_privada`: Percentual de alunos em escolas privadas.
+        - `perc_urbana`: Percentual de alunos em escolas na zona urbana.
+        - `perc_ingles`: Percentual de alunos que escolheram Inglês.
+        - `perc_redacoes_branco`: Percentual de redações entregues em branco.
+
+        **Engenharia de Features (Variáveis Criadas):**
+        - `log_pop_total`: População total transformada com logaritmo para reduzir o efeito de valores extremos (cidades muito grandes).
+        - `nota_x_proporcao_jovem`: Uma variável de interação que multiplica a nota média pela proporção de jovens, buscando capturar um efeito combinado.
+
+        **Variáveis Categóricas:**
+        - `uf_*`: Colunas criadas a partir da variável 'UF' (ex: `uf_SP`, `uf_RJ`, ...). Isso permite que o modelo aprenda características específicas de cada estado.
+        """)
 
     st.markdown("---")
     st.header('3. Metodologia Analítica')
     st.write("A abordagem metodológica emprega três modelos de regressão com propósitos complementares, permitindo uma análise robusta tanto em termos de interpretabilidade quanto de capacidade preditiva.")
     
-    # O restante da página 1 (colunas com os modelos) permanece o mesmo...
     col1_pag1, col2_pag2, col3_pag3 = st.columns(3)
     with col1_pag1:
         st.subheader('A. Regressão Linear Múltipla')
